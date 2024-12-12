@@ -1,9 +1,0 @@
-# Describes the format for available remote services
-
-
-get_aps_data:
-  target:
-    entity:
-      domain: sensor
-            
-
