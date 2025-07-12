@@ -1,4 +1,4 @@
-# Copyright (C) 2021-2023 Luis LÃ³pez <luis@cuarentaydos.com>
+# Copyright (C) 2021-2023 Luis López <luis@cuarentaydos.com>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,7 +15,6 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
 # USA.
 
-
 import asyncio
 import logging
 
@@ -29,7 +28,6 @@ PLATFORMS: list[str] = ["sensor"]
 
 _LOGGER = logging.getLogger(__name__)
 
-
 def get_device_info():
     return DeviceInfo(
         identifiers={
@@ -39,20 +37,18 @@ def get_device_info():
         manufacturer=NAME,
     )
 
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN] = hass.data.get(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = get_device_info()
 
-    for platform in PLATFORMS:
-        if entry.options.get(platform, True):
-            _LOGGER.debug(f"setting up {platform}")
-            hass.async_create_task(
-                hass.config_entries.async_forward_entry_setup(entry, platform)
-            )   
+    # Filter platforms based on options, defaulting to True if not specified
+    platforms_to_setup = [platform for platform in PLATFORMS if entry.options.get(platform, True)]
+    
+    if platforms_to_setup:
+        _LOGGER.debug(f"Setting up platforms: {platforms_to_setup}")
+        await hass.config_entries.async_forward_entry_setups(entry, platforms_to_setup)
 
     return True
-
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.debug("Unloading platforms")
@@ -68,7 +64,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unloaded
-
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await async_unload_entry(hass, entry)
