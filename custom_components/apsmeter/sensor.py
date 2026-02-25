@@ -109,7 +109,8 @@ class Sensor(PollUpdateMixin, HistoricalSensor, SensorEntity):
         hist_states = [
             HistoricalState(
                 state=state,
-                dt=dtutil.as_local(dt),  # Add tzinfo, required by HistoricalSensor
+#                timestamp=dtutil.as_local(dt),  # Add tzinfo, required by HistoricalSensor
+                 timestamp=dt.timestamp(),            
             )
             for (dt, state) in (await self.api.fetch(self._attr_name,
                 start=datetime.now() - timedelta(days=1), step=timedelta(minutes=60))
@@ -144,12 +145,13 @@ class Sensor(PollUpdateMixin, HistoricalSensor, SensorEntity):
         accumulated = latest["sum"] if latest else 0
 
         def hour_block_for_hist_state(hist_state: HistoricalState) -> datetime:
-            # XX:00:00 states belongs to previous hour block - NOT TRUE FOR APS
-            if hist_state.dt.minute == 0 and hist_state.dt.second == 0:
-#                dt = hist_state.dt - timedelta(hours=1)
-#                return dt.replace(minute=0, second=0, microsecond=0)
-                return hist_state.dt.replace(minute=0, second=0, microsecond=0)
-
+            # XX:00:00 states belongs to previous hour block - NOT TRUE FOR APS but api _set_intervalusagedata adds an hour to account for this.
+            time_float = hist_state.timestamp
+            dt = datetime.fromtimestamp(time_float)
+            if dt.minute == 0 and dt.second == 0:
+                dt = dt - timedelta(hours=1)
+                return dt.replace(minute=0, second=0, microsecond=0)
+                
             else:
                 return hist_state.dt.replace(minute=0, second=0, microsecond=0)
 
@@ -164,7 +166,7 @@ class Sensor(PollUpdateMixin, HistoricalSensor, SensorEntity):
 
             ret.append(
                 StatisticData(
-                    start=dt,
+                    start=dtutil.as_local(dt),
                     state=partial_sum,
                     mean=mean,
                     sum=accumulated,
