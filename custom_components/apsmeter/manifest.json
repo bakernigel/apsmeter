@@ -2,7 +2,7 @@
   "domain": "apsmeter",
   "name": "APS Meter",
   "codeowners": [
-    "@ldotlopez"
+    "@bakernigel"
   ],
   "dependencies": [
     "recorder"
@@ -14,5 +14,5 @@
   "requirements": [
     "homeassistant-historical-sensor==v3.0.0a3"
   ],
-  "version": "v3.0.0a3"
+  "version": "v3.0.1"
 }

@@ -1,27 +1,12 @@
-# Copyright (C) 2021-2023 Luis LÃ³pez <luis@cuarentaydos.com>
+# Copyright (C) 2021-2023 Luis López <luis@cuarentaydos.com>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
 # as published by the Free Software Foundation; either version 2
 # of the License, or (at your option) any later version.
 #
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
-# USA.
+# ... (keep your full copyright header)
 
-
-#
-# This is an example of historical sensor using the
-# `homeassistant_historical_sensor module` helper.
-#
-# Important methods include comments about code itself and reasons behind them
-#
 import logging
 import itertools
 import statistics
@@ -44,77 +29,50 @@ from homeassistant_historical_sensor import (
 )
 
 from .api import API
-from .const import DOMAIN, NAME
+from .const import DOMAIN, NAME, CONF_USERNAME, CONF_PASSWORD
 
 PLATFORM = "sensor"
-
 _LOGGER = logging.getLogger(__name__)
-
 SERVICE_COMMAND = "get_aps_data"
 
-class Sensor(PollUpdateMixin, HistoricalSensor, SensorEntity):
-    #
-    # Base clases:
-    # - SensorEntity: This is a sensor, obvious
-    # - HistoricalSensor: This sensor implements historical sensor methods
-    # - PollUpdateMixin: Historical sensors disable poll, this mixing
-    #                    reenables poll only for historical states and not for
-    #                    present state
-    #
 
-    def __init__(self, *args, **kwargs):
-    
-        _LOGGER.warning(
-                  "Sensor __init__ called %s ",
-                  kwargs["attr_name"],
-        )
-        
+class Sensor(PollUpdateMixin, HistoricalSensor, SensorEntity):
+    """APS Meter Historical Sensor."""
+
+    def __init__(self, api: API, attr_name: str, attr_unique_id: str, attr_entity_id: str):
         super().__init__()
 
+        _LOGGER.info("Sensor __init__ called %s", attr_name)
+
+        self.api = api  # ? Shared API instance with credentials
+
         self.UPDATE_INTERVAL = timedelta(days=30)
-
         self._attr_has_entity_name = True
-        self._attr_name = kwargs["attr_name"]
-
-        self._attr_unique_id = kwargs["attr_unique_id"]
-        self._attr_entity_id = kwargs["attr_entity_id"] 
-
+        self._attr_name = attr_name
+        self._attr_unique_id = attr_unique_id
+        self._attr_entity_id = attr_entity_id
         self._attr_entity_registry_enabled_default = True
         self._attr_state = None
-
-        # Define whatever you are
         self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
         self._attr_device_class = SensorDeviceClass.ENERGY
-
-        # We DON'T opt-in for statistics (don't set state_class). Why?
-        #
-        # Those statistics are generated from a real sensor, this sensor, but we don't
-        # want that hass try to do anything with those statistics because we
-        # (HistoricalSensor) handle generation and importing
-        #
-        # self._attr_state_class = SensorStateClass.MEASUREMENT
-
-        self.api = API()
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
 
     async def async_update_historical(self):
-        # Fill `HistoricalSensor._attr_historical_states` with HistoricalState's
-        # This functions is equivaled to the `Sensor.async_update` from
-        # HomeAssistant core
-        #
-        # Important: You must provide datetime with tzinfo
-        
+        """Fetch historical data and convert to HistoricalState objects."""
+        data = await self.api.fetch(
+            self._attr_name,
+            start=datetime.now() - timedelta(days=1),
+            step=timedelta(minutes=60),
+        )
+
         hist_states = [
             HistoricalState(
                 state=state,
-#                timestamp=dtutil.as_local(dt),  # Add tzinfo, required by HistoricalSensor
-                 timestamp=dt.timestamp(),            
+                timestamp=dt.timestamp(),   # HistoricalSensor expects unix timestamp
             )
-            for (dt, state) in (await self.api.fetch(self._attr_name,
-                start=datetime.now() - timedelta(days=1), step=timedelta(minutes=60))
-            )
+            for (dt, state) in data
         ]
         self._attr_historical_states = hist_states
 
@@ -123,46 +81,24 @@ class Sensor(PollUpdateMixin, HistoricalSensor, SensorEntity):
         return self.entity_id
 
     def get_statistic_metadata(self) -> StatisticMetaData:
-        #
-        # Add sum and mean to base statistics metadata
-        # Important: HistoricalSensor.get_statistic_metadata returns an
-        # internal source by default.
-        #
         meta = super().get_statistic_metadata()
         meta["has_sum"] = True
         meta["has_mean"] = True
-
         return meta
 
     async def async_calculate_statistic_data(
         self, hist_states: list[HistoricalState], *, latest: dict | None = None
     ) -> list[StatisticData]:
-        #
-        # Group historical states by hour
-        # Calculate sum, mean, etc...
-        #
-
         accumulated = latest["sum"] if latest else 0
-
-        def hour_block_for_hist_state(hist_state: HistoricalState) -> datetime:
-            # XX:00:00 states belongs to previous hour block - NOT TRUE FOR APS but api _set_intervalusagedata adds an hour to account for this.
-            time_float = hist_state.timestamp
-            dt = datetime.fromtimestamp(time_float)
-            if dt.minute == 0 and dt.second == 0:
-                dt = dt - timedelta(hours=1)
-                return dt.replace(minute=0, second=0, microsecond=0)
-                
-            else:
-                return hist_state.dt.replace(minute=0, second=0, microsecond=0)
-
         ret = []
+
         for dt, collection_it in itertools.groupby(
-            hist_states, key=hour_block_for_hist_state
+            hist_states, key=self._hour_block_for_hist_state
         ):
             collection = list(collection_it)
             mean = statistics.mean([x.state for x in collection])
             partial_sum = sum([x.state for x in collection])
-            accumulated = accumulated + partial_sum
+            accumulated += partial_sum
 
             ret.append(
                 StatisticData(
@@ -172,45 +108,71 @@ class Sensor(PollUpdateMixin, HistoricalSensor, SensorEntity):
                     sum=accumulated,
                 )
             )
-
         return ret
-        
-    async def async_get_aps_data(
-        self,
-        **kwargs
-    ) -> None:        
-        """Send a command"""
-        _LOGGER.warning(
-                  "get_aps_data %s",
-                  kwargs,
-        )
-        await self._async_historical_handle_update()        
-  
+
+    def _hour_block_for_hist_state(self, hist_state: HistoricalState) -> datetime:
+        """Group by hour (APS already adjusted in API)."""
+        dt = datetime.fromtimestamp(hist_state.timestamp)
+        if dt.minute == 0 and dt.second == 0:
+            dt = dt - timedelta(hours=1)
+        return dt.replace(minute=0, second=0, microsecond=0)
+
+    async def async_get_aps_data(self, **kwargs) -> None:
+        """Service call to refresh data."""
+        _LOGGER.info("get_aps_data called with %s", kwargs)
+        await self._async_historical_handle_update()
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     async_add_devices: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,  # noqa DiscoveryInfoType | None
-):
+) -> None:
+    """Set up APS Meter sensors from config entry."""
+    _LOGGER.info("async_setup_entry called")
 
-    _LOGGER.warning(
-                  "async_setup_entry called",
-    ) 
-         
-    device_info = hass.data[DOMAIN][config_entry.entry_id]
-# Add  aps_super_offpeak_usage
+    # Get credentials from config flow
+    username = config_entry.data[CONF_USERNAME]
+    password = config_entry.data[CONF_PASSWORD]
+
+    # Create ONE shared API instance with credentials
+    api = API(username=username, password=password)
+
+    # Store it so other platforms can use it later if needed
+    hass.data.setdefault(DOMAIN, {})[config_entry.entry_id] = api
+
+    # Create the four sensors, passing the shared api
     sensors = [
-        Sensor(config_entry=config_entry, device_info=device_info,attr_name = "aps_total_usage", attr_unique_id = "aps_total_usage", attr_entity_id = "aps_total_usage"),
-        Sensor(config_entry=config_entry, device_info=device_info,attr_name = "aps_onpeak_usage", attr_unique_id = "aps_onpeak_usage", attr_entity_id = "aps_onpeak_usage"),
-        Sensor(config_entry=config_entry, device_info=device_info,attr_name = "aps_offpeak_usage", attr_unique_id = "aps_offpeak_usage", attr_entity_id = "aps_offpeak_usage"),
-        Sensor(config_entry=config_entry, device_info=device_info,attr_name = "aps_otherpeak_usage", attr_unique_id = "aps_otherpeak_usage", attr_entity_id = "aps_otherpeak_usage"),
+        Sensor(
+            api=api,
+            attr_name="aps_total_usage",
+            attr_unique_id="aps_total_usage",
+            attr_entity_id="aps_total_usage",
+        ),
+        Sensor(
+            api=api,
+            attr_name="aps_onpeak_usage",
+            attr_unique_id="aps_onpeak_usage",
+            attr_entity_id="aps_onpeak_usage",
+        ),
+        Sensor(
+            api=api,
+            attr_name="aps_offpeak_usage",
+            attr_unique_id="aps_offpeak_usage",
+            attr_entity_id="aps_offpeak_usage",
+        ),
+        Sensor(
+            api=api,
+            attr_name="aps_otherpeak_usage",
+            attr_unique_id="aps_otherpeak_usage",
+            attr_entity_id="aps_otherpeak_usage",
+        ),
     ]
+
     async_add_devices(sensors)
-    
+
+    # Register the service
     platform = entity_platform.async_get_current_platform()
-    platform.async_register_entity_service(SERVICE_COMMAND, None, "async_get_aps_data") 
-    
+    platform.async_register_entity_service(SERVICE_COMMAND, None, "async_get_aps_data")
     
     
