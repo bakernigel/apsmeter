@@ -8,6 +8,7 @@ Uses the [homeassistant-historical-sensor](https://github.com/ldotlopez/ha-histo
 - Four sensors: Total, On-Peak, Off-Peak, Other-Peak usage (kWh)
 - Full historical data
 - Sensors must be manually updated each day using an automation that runs daily that executes the get_aps_data action for each sensor.
+- See example_automation.yaml
 - Works with the Energy Dashboard
 - Configurable username/password via UI
 - Reconfigure without removing the integration
