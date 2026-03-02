@@ -1,18 +1,12 @@
 {
   "domain": "apsmeter",
   "name": "APS Meter",
-  "codeowners": [
-    "@bakernigel"
-  ],
-  "dependencies": [
-    "recorder"
-  ],
+  "codeowners": ["@bakernigel"],
   "config_flow": true,
-  "documentation": "https://github.com/ldotlopez/ha-historical-sensor",
+  "documentation": "https://github.com/bakernigel/apsmeter",
+  "issue_tracker": "https://github.com/bakernigel/apsmeter/issues",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/ldotlopez/ha-historical-sensor/issues",
-  "requirements": [
-    "homeassistant-historical-sensor==v3.0.0a3"
-  ],
-  "version": "v3.0.1"
+  "requirements": ["homeassistant-historical-sensor==v3.0.0a3"],
+  "version": "3.0.1",
+  "dependencies": ["recorder"]
 }
