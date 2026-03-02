@@ -1,0 +1,39 @@
+alias: APSMeter get_aps_data
+description: ""
+triggers:
+  - at: "08:30:00"
+    trigger: time
+conditions: []
+actions:
+  - action: apsmeter.get_aps_data
+    target:
+      entity_id: sensor.aps_offpeak_usage
+    data: {}
+  - delay:
+      hours: 0
+      minutes: 1
+      seconds: 0
+      milliseconds: 0
+  - action: apsmeter.get_aps_data
+    data: {}
+    target:
+      entity_id: sensor.aps_onpeak_usage
+  - delay:
+      hours: 0
+      minutes: 1
+      seconds: 0
+      milliseconds: 0
+  - action: apsmeter.get_aps_data
+    target:
+      entity_id: sensor.aps_otherpeak_usage
+    data: {}
+  - delay:
+      hours: 0
+      minutes: 1
+      seconds: 0
+      milliseconds: 0
+  - action: apsmeter.get_aps_data
+    data: {}
+    target:
+      entity_id: sensor.aps_total_usage
+mode: single
